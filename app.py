@@ -1,26 +1,17 @@
-import streamlit as st
-import requests
-from bs4 import BeautifulSoup
+import re
 
-produkt = st.text_input("Produkt", "Pampers")
-
-if st.button("Vyhledat"):
-
-    url = f"https://www.kupi.cz/hledej?f={produkt}"
+if st.button("Analyzovat HTML"):
 
     response = requests.get(
         url,
         headers={"User-Agent": "Mozilla/5.0"}
     )
 
-    st.write("Status:", response.status_code)
+    html = response.text
 
-    soup = BeautifulSoup(response.text, "html.parser")
+    st.write("Počet výskytů 'Kč':", html.count("Kč"))
 
-    st.subheader("Titulek stránky")
+    matches = re.findall(r".{0,50}Kč.{0,50}", html)
 
-    st.write(soup.title.text if soup.title else "Nenalezen")
-
-    st.subheader("Prvních 3000 znaků HTML")
-
-    st.code(response.text[:3000])
+    for m in matches[:20\]:
+        st.text(m)
