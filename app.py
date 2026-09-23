@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import requests
+from bs4 import BeautifulSoup
 
 st.set_page_config(
     page_title="Hlídač slev",
@@ -9,28 +11,34 @@ st.set_page_config(
 
 st.title("🛒 Hlídač slev")
 
-# Načtení dat
-df = pd.read_csv("products.csv")
-
-# Výběr produktu
-produkt = st.selectbox(
-    "Vyber produkt",
-    sorted(df["produkt"].unique())
+produkt = st.text_input(
+    "Hledaný produkt",
+    "Pampers"
 )
 
-# Filtrace
-filtrovano = df[df["produkt"] == produkt]
+if st.button("Vyhledat"):
 
-st.subheader("Aktuální nabídky")
+    url = f"https://www.kupi.cz/hledej?f={produkt}"
 
-st.dataframe(
-    filtrovano.sort_values("cena"),
-    use_container_width=True
-)
+    headers = {
+        "User-Agent": "Mozilla/5.0"
+    }
 
-# Nejlevnější nabídka
-nejlevnejsi = filtrovano.loc[filtrovano["cena"].idxmin()]
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            timeout=20
+        )
 
-st.success(
-    f"Nejlepší nabídka: {nejlevnejsi['obchod']} za {nejlevnejsi['cena']} Kč"
-)
+        st.write(f"Status: {response.status_code}")
+
+        soup = BeautifulSoup(
+            response.text,
+            "html.parser"
+        )
+
+        st.write("Stránka načtena.")
+
+    except Exception as e:
+        st.error(str(e))
