@@ -38,7 +38,7 @@ if st.button("Najít akce"):
 
     if ceny:
 
-        for cena in ceny[:30\]:
+        for cena in ceny[:30]:
             text = cena.get_text(strip=True)
             st.write(text)
 
