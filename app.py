@@ -60,7 +60,7 @@ if st.button("Najít akce", type="primary"):
 
         vysledky = []
 
-        for cena in ceny[:30\]:
+        for cena in ceny[:30]:
             vysledky.append({
                 "Cena": cena.get_text(strip=True)
             })
