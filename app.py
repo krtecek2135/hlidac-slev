@@ -2,9 +2,16 @@ import streamlit as st
 import pandas as pd
 import requests
 
+from datetime import datetime
+from pathlib import Path
 from bs4 import BeautifulSoup
 from urllib.parse import quote_plus, urljoin
 
+HISTORY_FILE = "history.csv"
+
+if not Path(HISTORY_FILE).exists():
+    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
+        f.write("datum,produkt,cena\n")
 
 st.set_page_config(
     page_title="Hlídač slev",
