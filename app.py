@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("🛒 Hlídač slev")
-st.caption("Vyhledávání slev na Kupi.cz")
+st.caption("Test napojení na Kupi.cz")
 
 produkt = st.text_input(
     "Hledaný produkt",
@@ -23,8 +23,7 @@ if st.button("Najít akce", type="primary"):
         st.warning("Zadej název produktu.")
         st.stop()
 
-    hledany_produkt = quote_plus(produkt.strip())
-    url = f"https://www.kupi.cz/hledej?f={hledany_produkt}"
+    url = f"https://www.kupi.cz/hledej?f={quote_plus(produkt)}"
 
     try:
         response = requests.get(
@@ -41,8 +40,8 @@ if st.button("Najít akce", type="primary"):
 
         response.raise_for_status()
 
-    except requests.RequestException as chyba:
-        st.error(f"Nepodařilo se načíst data: {chyba}")
+    except Exception as e:
+        st.error(f"Chyba při načítání: {e}")
         st.stop()
 
     soup = BeautifulSoup(response.text, "html.parser")
@@ -53,54 +52,40 @@ if st.button("Najít akce", type="primary"):
     )
 
     st.success(
-        f"Stránka byla načtena. Nalezeno cen: {len(ceny)}"
+        f"Nalezeno {len(ceny)} cen"
     )
+
+    st.subheader("Nalezené ceny")
+
+    for cena in ceny[:20\]:
+        st.write(cena.get_text(strip=True))
 
     if ceny:
 
-        vysledky = []
+        st.divider()
 
-        for cena in ceny[:30]:
-            vysledky.append({
-                "Cena": cena.get_text(strip=True)
-            })
+        st.subheader("Diagnostika prvního výsledku")
 
-        st.subheader("Nalezené ceny")
+        aktualni = ceny[0]
 
-        st.dataframe(
-            vysledky,
-            use_container_width=True,
-            hide_index=True
+        st.write(
+            "První nalezená cena:",
+            aktualni.get_text(strip=True)
         )
 
-    else:
-        st.warning(
-            "Nebyla nalezena žádná cena."
-        )
+        rodic = aktualni
 
-    with st.expander("Diagnostika prvního výsledku"):
+        for uroven in range(1, 7):
 
-        if ceny:
+            if rodic.parent is None:
+                break
 
-            prvek = ceny[0]
+            rodic = rodic.parent
 
-            st.write("Text ceny:")
-            st.write(prvek.get_text(strip=True))
-
-            rodic = prvek
-
-            for uroven in range(1, 9):
-
-                if rodic.parent is None:
-                   break
-
-                rodic = rodic.parent
-
-                st.markdown(
-                    f"### Nadřazená úroveň {uroven}"
-                )
-
+            with st.expander(
+                f"Nadřazená úroveň {uroven}"
+            ):
                 st.code(
-                    str(rodic)[:5000],
+                    rodic.prettify()[:10000],
                     language="html"
                 )
