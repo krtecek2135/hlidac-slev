@@ -504,13 +504,13 @@ if hledat:
                 "Dnešní nabídky už byly v historii uloženy."
             )
 
-        nejlevnejsi = df.dropna(
+                nejlevnejsi = df.dropna(
             subset=["Cena (Kč)"]
         ).head(1)
 
         col1, col2, col3 = st.columns(3)
 
-                if not nejlevnejsi.empty:
+        if not nejlevnejsi.empty:
             nejlevnejsi_radek = nejlevnejsi.iloc[0]
 
             with col1:
