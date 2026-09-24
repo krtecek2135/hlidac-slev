@@ -1,7 +1,10 @@
 import streamlit as st
+import pandas as pd
 import requests
+
 from bs4 import BeautifulSoup
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urljoin
+
 
 st.set_page_config(
     page_title="Hlídač slev",
@@ -10,11 +13,11 @@ st.set_page_config(
 )
 
 st.title("🛒 Hlídač slev")
-st.caption("Test napojení na Kupi.cz")
+st.caption("Vyhledávání akčních nabídek v Lidlu a Kauflandu")
 
 produkt = st.text_input(
     "Hledaný produkt",
-    "Pampers"
+    value="Pampers"
 )
 
 if st.button("Najít akce", type="primary"):
@@ -23,7 +26,8 @@ if st.button("Najít akce", type="primary"):
         st.warning("Zadej název produktu.")
         st.stop()
 
-    url = f"https://www.kupi.cz/hledej?f={quote_plus(produkt)}"
+    hledany_produkt = quote_plus(produkt.strip())
+    url = f"https://www.kupi.cz/hledej?f={hledany_produkt}"
 
     try:
         response = requests.get(
@@ -40,52 +44,183 @@ if st.button("Najít akce", type="primary"):
 
         response.raise_for_status()
 
-    except Exception as e:
-        st.error(f"Chyba při načítání: {e}")
+    except requests.RequestException as chyba:
+        st.error(f"Nepodařilo se načíst data: {chyba}")
         st.stop()
 
     soup = BeautifulSoup(response.text, "html.parser")
 
-    ceny = soup.find_all(
-        "strong",
-        class_="discount_price_value"
-    )
+    # Každý tento blok představuje jednu obchodní nabídku.
+    bloky_akci = soup.select(".discount_row")
 
-    st.success(
-        f"Nalezeno {len(ceny)} cen"
-    )
+    vysledky = []
 
-    st.subheader("Nalezené ceny")
+    for blok in bloky_akci:
 
-    for cena in ceny[:20]:
-        st.write(cena.get_text(strip=True))
-
-    if ceny:
-
-        st.divider()
-
-        st.subheader("Diagnostika prvního výsledku")
-
-        aktualni = ceny[0]
-
-        st.write(
-            "První nalezená cena:",
-            aktualni.get_text(strip=True)
+        obchod_element = blok.select_one(
+            ".discounts_shop_name"
         )
 
-        rodic = aktualni
+        cena_element = blok.select_one(
+            ".discount_price_value"
+        )
 
-        for uroven in range(1, 7):
+        platnost_element = blok.select_one(
+            ".discounts_validity"
+        )
 
-            if rodic.parent is None:
-                break
+        poznamka_element = blok.select_one(
+            ".discount_note"
+        )
 
-            rodic = rodic.parent
+        produkt_element = blok.select_one(
+            ".btn_list_add[data-product]"
+        )
 
-            with st.expander(
-                f"Nadřazená úroveň {uroven}"
-            ):
-                st.code(
-                    rodic.prettify()[:10000],
-                    language="html"
+        letak_element = blok.select_one(
+            ".btn_link_leaflet[href]"
+        )
+
+        if obchod_element is None or cena_element is None:
+            continue
+
+        obchod = obchod_element.get_text(
+            " ",
+            strip=True
+        )
+
+        # Zobrazíme pouze Lidl a Kaufland.
+        if obchod.lower() not in ["lidl", "kaufland"\]:
+            continue
+
+        cena_text = cena_element.get_text(
+            " ",
+            strip=True
+        )
+
+        cena_cislo = (
+            cena_text
+            .replace("Kč", "")
+            .replace("\xa0", "")
+            .replace(" ", "")
+            .replace(",", ".")
+            .strip()
+        )
+
+        try:
+            cena_cislo = float(cena_cislo)
+        except ValueError:
+            cena_cislo = None
+
+        if produkt_element:
+            nazev_produktu = produkt_element.get(
+                "data-product",
+                produkt
+            )
+        else:
+            nazev_produktu = produkt
+
+        if platnost_element:
+            platnost = platnost_element.get_text(
+                " ",
+                strip=True
+            )
+        else:
+            platnost = "Neuvedeno"
+
+        if poznamka_element:
+            poznamka = poznamka_element.get_text(
+                " ",
+                strip=True
+            )
+        else:
+            poznamka = ""
+
+        if letak_element:
+            odkaz_na_letak = urljoin(
+                "https://www.kupi.cz",
+                letak_element.get("href")
+            )
+        else:
+            odkaz_na_letak = ""
+
+        vysledky.append(
+            {
+                "Produkt": nazev_produktu,
+                "Obchod": obchod,
+                "Cena (Kč)": cena_cislo,
+                "Cena": cena_text,
+                "Platnost": platnost,
+                "Poznámka": poznamka,
+                "Leták": odkaz_na_letak
+            }
+        )
+
+    if not vysledky:
+        st.warning(
+            "Pro zadaný produkt nebyla nalezena nabídka "
+            "v Lidlu ani Kauflandu."
+        )
+
+        st.info(
+            f"Celkem bylo na stránce nalezeno "
+            f"{len(bloky_akci)} nabídkových bloků, "
+            "ale žádný nepatřil Lidlu nebo Kauflandu."
+        )
+
+    else:
+        df = pd.DataFrame(vysledky)
+
+        df = df.sort_values(
+            by="Cena (Kč)",
+            na_position="last"
+        )
+
+        st.success(
+            f"Nalezeno nabídek: {len(df)}"
+        )
+
+        nejlevnejsi = df.iloc[0]
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            st.metric(
+                "Nejnižší cena",
+                nejlevnejsi["Cena"]
+            )
+
+        with col2:
+            st.metric(
+                "Nejlevnější obchod",
+                nejlevnejsi["Obchod"]
+            )
+
+        with col3:
+            st.metric(
+                "Počet nabídek",
+                len(df)
+            )
+
+        st.subheader("Nalezené nabídky")
+
+        st.dataframe(
+            df[
+                [
+                    "Produkt",
+                    "Obchod",
+                    "Cena",
+                    "Platnost",
+                    "Poznámka",
+                    "Leták"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Leták": st.column_config.LinkColumn(
+                    "Odkaz na leták",
+                    display_text="Otevřít leták"
                 )
+            }
+        )
