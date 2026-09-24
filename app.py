@@ -2,19 +2,11 @@ import streamlit as st
 import requests
 from bs4 import BeautifulSoup
 
-st.set_page_config(
-    page_title="Hlídač slev",
-    page_icon="🛒"
-)
+st.title("Kupi diagnostika")
 
-st.title("🛒 Hlídač slev")
+produkt = st.text_input("Produkt", "Pampers")
 
-produkt = st.text_input(
-    "Produkt",
-    "Pampers"
-)
-
-if st.button("Najít akce"):
+if st.button("Analyzovat"):
 
     url = f"https://www.kupi.cz/hledej?f={produkt}"
 
@@ -25,34 +17,34 @@ if st.button("Najít akce"):
         }
     )
 
-    st.success(f"Status: {response.status_code}")
-
     soup = BeautifulSoup(
         response.text,
         "html.parser"
     )
 
-    ceny = soup.select(".discount_price_value")
+    ceny = soup.find_all(
+        "strong",
+        class_="discount_price_value"
+    )
 
-    st.subheader("Nalezené ceny")
+    st.write("Počet cen:", len(ceny))
 
     if ceny:
 
-        for cena in ceny[:30]:
-            text = cena.get_text(strip=True)
-            st.write(text)
+        st.subheader("První nalezený blok")
 
-    else:
-        st.error(
-            "Třída discount_price_value nebyla nalezena"
+        prvek = ceny[0]
+
+        rodic = prvek.parent
+
+        st.code(
+            rodic.prettify()
         )
 
-    with st.expander("Diagnostika HTML"):
+        st.subheader("Celý nadřazený blok")
 
-        for element in soup.select(
-            ".discount_price_value"
-        )[:5]:
+        blok = rodic.parent
 
-            st.code(
-                str(element.parent)
-            )
+        st.code(
+            blok.prettify()
+        )
