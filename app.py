@@ -1,17 +1,16 @@
 import streamlit as st
 import pandas as pd
 import requests
-import plotly.express as px
 
 from bs4 import BeautifulSoup
-from datetime import date
-from pathlib import Path
 from urllib.parse import quote_plus, urljoin
+from datetime import datetime
+from pathlib import Path
 
 
-HISTORY_FILE = Path("history.csv")
-POVOLENE_OBCHODY = ["lidl", "kaufland"]
-
+# ==================================================
+# ZÁKLADNÍ NASTAVENÍ
+# ==================================================
 
 st.set_page_config(
     page_title="Hlídač slev",
@@ -19,165 +18,303 @@ st.set_page_config(
     layout="wide"
 )
 
+HISTORY_FILE = Path("history.csv")
 
-def preved_cenu_na_cislo(cena_text):
+HISTORY_COLUMNS = [
+    "datum",
+    "hledany_produkt",
+    "produkt",
+    "obchod",
+    "cena",
+    "cena_text",
+    "platnost",
+    "poznamka",
+    "odkaz"
+]
+
+
+# ==================================================
+# FUNKCE PRO HISTORII
+# ==================================================
+
+def vytvor_nebo_oprav_historii():
     """
-    Převede například '179,90 Kč' na číslo 179.90.
-    Pokud převod selže, vrátí None.
+    Vytvoří history.csv, pokud soubor neexistuje nebo je prázdný.
+    Pokud soubor existuje, doplní případné chybějící sloupce.
     """
 
-    if not cena_text:
-        return None
+    if not HISTORY_FILE.exists() or HISTORY_FILE.stat().st_size == 0:
+        prazdna_historie = pd.DataFrame(
+            columns=HISTORY_COLUMNS
+        )
 
-    vycistena_cena = (
-        cena_text
-        .replace("Kč", "")
-        .replace("\xa0", "")
-        .replace(" ", "")
-        .replace(",", ".")
-        .strip()
-    )
+        prazdna_historie.to_csv(
+            HISTORY_FILE,
+            index=False,
+            encoding="utf-8-sig"
+        )
+
+        return
 
     try:
-        return float(vycistena_cena)
-    except ValueError:
-        return None
+        historie = pd.read_csv(HISTORY_FILE)
+
+        for sloupec in HISTORY_COLUMNS:
+            if sloupec not in historie.columns:
+                historie[sloupec] = ""
+
+        historie = historie[HISTORY_COLUMNS]
+
+        historie.to_csv(
+            HISTORY_FILE,
+            index=False,
+            encoding="utf-8-sig"
+        )
+
+    except (
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError
+    ):
+        prazdna_historie = pd.DataFrame(
+            columns=HISTORY_COLUMNS
+        )
+
+        prazdna_historie.to_csv(
+            HISTORY_FILE,
+            index=False,
+            encoding="utf-8-sig"
+        )
 
 
 def nacti_historii():
     """
-    Bezpečně načte historii.
-    Zvládne také situaci, kdy soubor neexistuje nebo je prázdný.
+    Načte history.csv.
+    Pokud nastane problém, vrátí prázdnou tabulku.
     """
-
-    pozadovane_sloupce = [
-        "Datum",
-        "Hledaný výraz",
-        "Produkt",
-        "Obchod",
-        "Cena (Kč)",
-        "Cena",
-        "Platnost",
-        "Poznámka",
-        "Leták"
-    ]
-
-    if not HISTORY_FILE.exists():
-        return pd.DataFrame(columns=pozadovane_sloupce)
-
-    if HISTORY_FILE.stat().st_size == 0:
-        return pd.DataFrame(columns=pozadovane_sloupce)
 
     try:
         historie = pd.read_csv(HISTORY_FILE)
-    except (pd.errors.EmptyDataError, pd.errors.ParserError):
-        return pd.DataFrame(columns=pozadovane_sloupce)
 
-    for sloupec in pozadovane_sloupce:
-        if sloupec not in historie.columns:
-            historie[sloupec] = ""
+        for sloupec in HISTORY_COLUMNS:
+            if sloupec not in historie.columns:
+                historie[sloupec] = ""
 
-    historie["Cena (Kč)"] = pd.to_numeric(
-        historie["Cena (Kč)"],
-        errors="coerce"
-    )
+        return historie[HISTORY_COLUMNS]
 
-    return historie[pozadovane_sloupce]
+    except (
+        FileNotFoundError,
+        pd.errors.EmptyDataError,
+        pd.errors.ParserError
+    ):
+        return pd.DataFrame(
+            columns=HISTORY_COLUMNS
+        )
 
 
-def uloz_historii(df, hledany_vyraz):
+def uloz_do_historie(vysledky, hledany_produkt):
     """
-    Přidá nalezené nabídky do historie.
-    Stejná nabídka se ve stejný den neuloží opakovaně.
+    Uloží nalezené nabídky do history.csv.
+
+    Stejná nabídka se uloží maximálně jednou za den.
+    Kontroluje se produkt, obchod, cena a platnost.
     """
 
-    if df.empty:
+    if not vysledky:
         return 0
 
-    nova_historie = df.copy()
+    historie = nacti_historii()
 
-    nova_historie.insert(
-        0,
-        "Datum",
-        date.today().isoformat()
+    datum_a_cas = datetime.now().strftime(
+        "%Y-%m-%d %H:%M:%S"
     )
 
-    nova_historie.insert(
-        1,
-        "Hledaný výraz",
-        hledany_vyraz.strip()
+    dnes = datetime.now().strftime(
+        "%Y-%m-%d"
     )
 
-    stara_historie = nacti_historii()
+    nove_zaznamy = []
 
-    pocet_pred_ulozenim = len(stara_historie)
+    for vysledek in vysledky:
+        cena = vysledek["Cena (Kč)"]
 
-    kompletni_historie = pd.concat(
-        [stara_historie, nova_historie],
+        duplicita = False
+
+        if not historie.empty:
+            datum_historie = (
+                historie["datum"]
+                .astype(str)
+                .str[:10]
+            )
+
+            ceny_historie = pd.to_numeric(
+                historie["cena"],
+                errors="coerce"
+            )
+
+            duplicita = (
+                (datum_historie == dnes)
+                & (
+                    historie["hledany_produkt"]
+                    .astype(str)
+                    .str.lower()
+                    == hledany_produkt.lower()
+                )
+                & (
+                    historie["produkt"]
+                    .astype(str)
+                    == str(vysledek["Produkt"])
+                )
+                & (
+                    historie["obchod"]
+                    .astype(str)
+                    == str(vysledek["Obchod"])
+                )
+                & (
+                    ceny_historie == cena
+                )
+                & (
+                    historie["platnost"]
+                    .astype(str)
+                    == str(vysledek["Platnost"])
+                )
+            ).any()
+
+        if not duplicita:
+            nove_zaznamy.append(
+                {
+                    "datum": datum_a_cas,
+                    "hledany_produkt": hledany_produkt,
+                    "produkt": vysledek["Produkt"],
+                    "obchod": vysledek["Obchod"],
+                    "cena": cena,
+                    "cena_text": vysledek["Cena"],
+                    "platnost": vysledek["Platnost"],
+                    "poznamka": vysledek["Poznámka"],
+                    "odkaz": vysledek["Leták"]
+                }
+            )
+
+    if not nove_zaznamy:
+        return 0
+
+    nove_df = pd.DataFrame(
+        nove_zaznamy,
+        columns=HISTORY_COLUMNS
+    )
+
+    historie = pd.concat(
+        [historie, nove_df],
         ignore_index=True
     )
 
-    kompletni_historie["Cena (Kč)"] = pd.to_numeric(
-        kompletni_historie["Cena (Kč)"],
-        errors="coerce"
-    )
-
-    kompletni_historie = kompletni_historie.drop_duplicates(
-        subset=[
-            "Datum",
-            "Produkt",
-            "Obchod",
-            "Cena (Kč)",
-            "Platnost"
-        ],
-        keep="last"
-    )
-
-    kompletni_historie = kompletni_historie.sort_values(
-        by=["Datum", "Produkt", "Obchod"],
-        ascending=[True, True, True]
-    )
-
-    kompletni_historie.to_csv(
+    historie.to_csv(
         HISTORY_FILE,
         index=False,
         encoding="utf-8-sig"
     )
 
-    return len(kompletni_historie) - pocet_pred_ulozenim
+    return len(nove_df)
 
 
-def stahni_nabidky(hledany_produkt):
-    """
-    Načte nabídky a vybere pouze Lidl a Kaufland.
-    """
+# ==================================================
+# PŘÍPRAVA SOUBORU HISTORY.CSV
+# ==================================================
 
-    zakodovany_produkt = quote_plus(hledany_produkt.strip())
-    url = f"https://www.kupi.cz/hledej?f={zakodovany_produkt}"
+vytvor_nebo_oprav_historii()
 
-    response = requests.get(
-        url,
-        headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0 Safari/537.36"
-            )
-        },
-        timeout=20
+
+# ==================================================
+# HLAVIČKA APLIKACE
+# ==================================================
+
+st.title("🛒 Hlídač slev")
+
+st.caption(
+    "Vyhledávání akčních nabídek v Lidlu a Kauflandu"
+)
+
+
+# ==================================================
+# VSTUPNÍ ÚDAJE
+# ==================================================
+
+produkt = st.text_input(
+    "Hledaný produkt",
+    value="Kuřecí prsní"
+)
+
+cenovy_limit = st.number_input(
+    "Upozornit při ceně nižší nebo rovné",
+    min_value=0.0,
+    value=150.0,
+    step=10.0,
+    format="%.2f",
+    help=(
+        "Pokud bude nejnižší nalezená cena stejná "
+        "nebo nižší než tento limit, aplikace zobrazí upozornění."
+    )
+)
+
+hledat = st.button(
+    "Najít akce",
+    type="primary"
+)
+
+
+# ==================================================
+# VYHLEDÁVÁNÍ NABÍDEK
+# ==================================================
+
+if hledat:
+
+    if not produkt.strip():
+        st.warning("Zadej název produktu.")
+        st.stop()
+
+    hledany_produkt = produkt.strip()
+    parametr_produktu = quote_plus(hledany_produkt)
+
+    url = (
+        "https://www.kupi.cz/hledej?"
+        f"f={parametr_produktu}"
     )
 
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": (
+                    "Mozilla/5.0 "
+                    "(Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 "
+                    "(KHTML, like Gecko) "
+                    "Chrome/120.0 Safari/537.36"
+                )
+            },
+            timeout=15
+        )
+
+        response.raise_for_status()
+
+    except requests.RequestException as chyba:
+        st.error(
+            f"Nepodařilo se načíst data z Kupi.cz: {chyba}"
+        )
+        st.stop()
 
     soup = BeautifulSoup(
         response.text,
         "html.parser"
     )
 
-    bloky_akci = soup.select(".discount_row")
+    bloky_akci = soup.select(
+        ".discount_row"
+    )
+
     vysledky = []
 
     for blok in bloky_akci:
+
         obchod_element = blok.select_one(
             ".discounts_shop_name"
         )
@@ -202,7 +339,10 @@ def stahni_nabidky(hledany_produkt):
             ".btn_link_leaflet[href]"
         )
 
-        if obchod_element is None or cena_element is None:
+        if obchod_element is None:
+            continue
+
+        if cena_element is None:
             continue
 
         obchod = obchod_element.get_text(
@@ -210,7 +350,11 @@ def stahni_nabidky(hledany_produkt):
             strip=True
         )
 
-        if obchod.lower() not in POVOLENE_OBCHODY:
+        # Zobrazujeme pouze nabídky Lidlu a Kauflandu.
+        if obchod.lower() not in [
+            "lidl",
+            "kaufland"
+        \]:
             continue
 
         cena_text = cena_element.get_text(
@@ -218,11 +362,24 @@ def stahni_nabidky(hledany_produkt):
             strip=True
         )
 
-        cena_cislo = preved_cenu_na_cislo(
+        cena_cislo_text = (
             cena_text
+            .replace("Kč", "")
+            .replace("\xa0", "")
+            .replace(" ", "")
+            .replace(",", ".")
+            .strip()
         )
 
-        if produkt_element:
+        try:
+            cena_cislo = float(
+                cena_cislo_text
+            )
+
+        except ValueError:
+            cena_cislo = None
+
+        if produkt_element is not None:
             nazev_produktu = produkt_element.get(
                 "data-product",
                 hledany_produkt
@@ -230,7 +387,7 @@ def stahni_nabidky(hledany_produkt):
         else:
             nazev_produktu = hledany_produkt
 
-        if platnost_element:
+        if platnost_element is not None:
             platnost = platnost_element.get_text(
                 " ",
                 strip=True
@@ -238,7 +395,7 @@ def stahni_nabidky(hledany_produkt):
         else:
             platnost = "Neuvedeno"
 
-        if poznamka_element:
+        if poznamka_element is not None:
             poznamka = poznamka_element.get_text(
                 " ",
                 strip=True
@@ -246,10 +403,14 @@ def stahni_nabidky(hledany_produkt):
         else:
             poznamka = ""
 
-        if letak_element:
+        if letak_element is not None:
+            relativni_odkaz = letak_element.get(
+                "href"
+            )
+
             odkaz_na_letak = urljoin(
                 "https://www.kupi.cz",
-                letak_element.get("href", "")
+                relativni_odkaz
             )
         else:
             odkaz_na_letak = ""
@@ -266,331 +427,123 @@ def stahni_nabidky(hledany_produkt):
             }
         )
 
-    df = pd.DataFrame(vysledky)
+    # ==================================================
+    # VÝSLEDKY VYHLEDÁVÁNÍ
+    # ==================================================
 
-    if not df.empty:
-        df = df.drop_duplicates(
-            subset=[
-                "Produkt",
-                "Obchod",
-                "Cena (Kč)",
-                "Platnost"
-            ]
-        )
-
-        df = df.sort_values(
-            by="Cena (Kč)",
-            na_position="last"
-        )
-
-    return df, len(bloky_akci)
-
-
-def zobraz_historii(hledany_vyraz):
-    """
-    Zobrazí historii odpovídající aktuálnímu hledanému výrazu.
-    """
-
-    historie = nacti_historii()
-
-    if historie.empty:
-        st.info(
-            "Historie zatím neobsahuje žádné záznamy."
-        )
-        return
-
-    historie["Datum"] = pd.to_datetime(
-        historie["Datum"],
-        errors="coerce"
-    )
-
-    historie["Cena (Kč)"] = pd.to_numeric(
-        historie["Cena (Kč)"],
-        errors="coerce"
-    )
-
-    maska_vyrazu = historie["Hledaný výraz"].str.contains(
-        hledany_vyraz,
-        case=False,
-        na=False,
-        regex=False
-    )
-
-    maska_produktu = historie["Produkt"].str.contains(
-        hledany_vyraz,
-        case=False,
-        na=False,
-        regex=False
-    )
-
-    filtrovana_historie = historie[
-        maska_vyrazu | maska_produktu
-    ].copy()
-
-    filtrovana_historie = filtrovana_historie.dropna(
-        subset=["Datum", "Cena (Kč)"]
-    )
-
-    if filtrovana_historie.empty:
-        st.info(
-            "Pro tento hledaný výraz zatím není dostupná historie."
-        )
-        return
-
-    st.subheader("📈 Historie cen")
-
-    col1, col2, col3 = st.columns(3)
-
-    historicke_minimum = filtrovana_historie["Cena (Kč)"].min()
-    historicky_prumer = filtrovana_historie["Cena (Kč)"].mean()
-    pocet_zaznamu = len(filtrovana_historie)
-
-    with col1:
-        st.metric(
-            "Historické minimum",
-            f"{historicke_minimum:.2f} Kč".replace(".", ",")
-        )
-
-    with col2:
-        st.metric(
-            "Průměrná zaznamenaná cena",
-            f"{historicky_prumer:.2f} Kč".replace(".", ",")
-        )
-
-    with col3:
-        st.metric(
-            "Počet historických záznamů",
-            pocet_zaznamu
-        )
-
-    grafova_data = (
-        filtrovana_historie
-        .groupby(
-            ["Datum", "Obchod"],
-            as_index=False
-        )["Cena (Kč)"]
-        .min()
-    )
-
-    fig = px.line(
-        grafova_data,
-        x="Datum",
-        y="Cena (Kč)",
-        color="Obchod",
-        markers=True,
-        title=f"Vývoj nejnižší ceny pro výraz: {hledany_vyraz}",
-        labels={
-            "Datum": "Datum",
-            "Cena (Kč)": "Cena v Kč",
-            "Obchod": "Obchod"
-        }
-    )
-
-    fig.update_yaxes(
-        rangemode="tozero"
-    )
-
-    st.plotly_chart(
-        fig,
-        use_container_width=True
-    )
-
-    with st.expander("Zobrazit uloženou historii"):
-        zobrazena_historie = filtrovana_historie.sort_values(
-            by="Datum",
-            ascending=False
-        ).copy()
-
-        zobrazena_historie["Datum"] = zobrazena_historie[
-            "Datum"
-        ].dt.strftime("%d. %m. %Y")
-
-        st.dataframe(
-            zobrazena_historie[
-                [
-                    "Datum",
-                    "Produkt",
-                    "Obchod",
-                    "Cena",
-                    "Platnost",
-                    "Poznámka",
-                    "Leták"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Leták": st.column_config.LinkColumn(
-                    "Odkaz na leták",
-                    display_text="Otevřít leták"
-                )
-            }
-        )
-
-
-st.title("🛒 Hlídač slev")
-st.caption("Vyhledávání akčních nabídek v Lidlu a Kauflandu")
-
-st.sidebar.header("⭐ Sledované produkty")
-
-watchlist = nacti_watchlist()
-
-if not watchlist.empty:
-    st.sidebar.dataframe(
-        watchlist,
-        hide_index=True
-    )
-
-novy_produkt = st.sidebar.text_input(
-    "Nový produkt"
-)
-
-limit = st.sidebar.number_input(
-    "Cenový limit",
-    min_value=0.0,
-    value=100.0
-)
-
-if st.sidebar.button("Přidat"):
-    
-    novy_radek = pd.DataFrame([
-        {
-            "Produkt": novy_produkt,
-            "Limit": limit
-        }
-    ])
-
-    watchlist = pd.concat(
-        [watchlist, novy_radek],
-        ignore_index=True
-    )
-
-    watchlist.drop_duplicates(
-        subset=["Produkt"],
-        inplace=True
-    )
-
-    watchlist.to_csv(
-        WATCHLIST_FILE,
-        index=False
-    )
-
-    st.rerun()
-
-produkt = st.text_input(
-    "Hledaný produkt",
-    value="Kuřecí prsní"
-)
-
-hledat = st.button(
-    "Najít akce",
-    type="primary"
-)
-
-if hledat:
-    if not produkt.strip():
-        st.warning(
-            "Zadej název produktu."
-        )
-        st.stop()
-
-    try:
-        with st.spinner("Vyhledávám aktuální nabídky..."):
-            df, pocet_bloku = stahni_nabidky(
-                produkt
-            )
-
-    except requests.Timeout:
-        st.error(
-            "Načítání trvalo příliš dlouho. Zkus hledání zopakovat."
-        )
-        st.stop()
-
-    except requests.RequestException as chyba:
-        st.error(
-            f"Nepodařilo se načíst data: {chyba}"
-        )
-        st.stop()
-
-    except Exception as chyba:
-        st.error(
-            f"Při zpracování dat nastala chyba: {chyba}"
-        )
-        st.stop()
-
-    if df.empty:
+    if not vysledky:
         st.warning(
             "Pro zadaný produkt nebyla nalezena nabídka "
             "v Lidlu ani Kauflandu."
         )
 
         st.info(
-            f"Na zdrojové stránce bylo nalezeno "
-            f"{pocet_bloku} nabídkových bloků, "
-            "ale žádný nepatřil Lidlu nebo Kauflandu."
+            f"Na stránce bylo nalezeno "
+            f"{len(bloky_akci)} nabídkových bloků."
         )
 
     else:
-        pocet_novych_zaznamu = uloz_historii(
-            df,
-            produkt
+        df = pd.DataFrame(
+            vysledky
+        )
+
+        df["Cena (Kč)"] = pd.to_numeric(
+            df["Cena (Kč)"],
+            errors="coerce"
+        )
+
+        df = df.sort_values(
+            by="Cena (Kč)",
+            na_position="last"
+        ).reset_index(
+            drop=True
+        )
+
+        pocet_ulozenych = uloz_do_historie(
+            vysledky,
+            hledany_produkt
         )
 
         st.success(
             f"Nalezeno nabídek: {len(df)}"
         )
 
-        if pocet_novych_zaznamu > 0:
-            st.caption(
+        if pocet_ulozenych > 0:
+            st.write(
                 f"Do historie bylo přidáno "
-                f"{pocet_novych_zaznamu} nových záznamů."
+                f"{pocet_ulozenych} nových záznamů."
             )
         else:
-            st.caption(
-                "Dnešní nabídky už byly v historii uloženy."
+            st.write(
+                "Dnešní nabídky už byly v historii uložené."
             )
 
-        nejlevnejsi = df.dropna(
+        # Odstranění řádků bez číselné ceny
+        platne_ceny = df.dropna(
             subset=["Cena (Kč)"]
-        ).head(1)
+        )
 
-        col1, col2, col3 = st.columns(3)
+        if not platne_ceny.empty:
+            nejlevnejsi = platne_ceny.iloc[0]
 
-        if not nejlevnejsi.empty:
-            nejlevnejsi_radek = nejlevnejsi.iloc[0]
+            nejlevnejsi_cena = float(
+                nejlevnejsi["Cena (Kč)"]
+            )
+
+            col1, col2, col3 = st.columns(3)
 
             with col1:
                 st.metric(
                     "Nejnižší cena",
-                    nejlevnejsi_radek["Cena"]
+                    nejlevnejsi["Cena"]
                 )
 
             with col2:
                 st.metric(
                     "Nejlevnější obchod",
-                    nejlevnejsi_radek["Obchod"]
+                    nejlevnejsi["Obchod"]
+                )
+
+            with col3:
+                st.metric(
+                    "Počet nabídek",
+                    len(df)
+                )
+
+            # ==========================================
+            # HLÍDÁNÍ CENOVÉHO LIMITU
+            # ==========================================
+
+            if nejlevnejsi_cena <= cenovy_limit:
+                rozdil = cenovy_limit - nejlevnejsi_cena
+
+                st.success(
+                    f"Produkt je pod nastaveným limitem. "
+                    f"Nejnižší cena je "
+                    f"{nejlevnejsi_cena:.2f} Kč, "
+                    f"tedy o {rozdil:.2f} Kč méně "
+                    f"než nastavený limit."
+                )
+            else:
+                rozdil = nejlevnejsi_cena - cenovy_limit
+
+                st.info(
+                    f"Produkt zatím není pod nastaveným limitem. "
+                    f"Nejnižší cena je "
+                    f"{nejlevnejsi_cena:.2f} Kč, "
+                    f"tedy o {rozdil:.2f} Kč více "
+                    f"než nastavený limit."
                 )
 
         else:
-            with col1:
-                st.metric(
-                    "Nejnižší cena",
-                    "Neuvedeno"
-                )
-
-            with col2:
-                st.metric(
-                    "Nejlevnější obchod",
-                    "Neuvedeno"
-                )
-
-        with col3:
-            st.metric(
-                "Počet nabídek",
-                len(df)
+            st.warning(
+                "Nabídky byly nalezeny, ale jejich ceny "
+                "se nepodařilo převést na čísla."
             )
 
-        st.subheader("Nalezené nabídky")
+        st.subheader(
+            "Nalezené nabídky"
+        )
 
         st.dataframe(
             df[
@@ -608,32 +561,169 @@ if hledat:
             column_config={
                 "Leták": st.column_config.LinkColumn(
                     "Odkaz na leták",
-                    display_text="Otevřít leták"
-                )
+                    display_text="Otevřít leták"                )
             }
         )
 
-        zobraz_historii(produkt)
+
+# ==================================================
+# HISTORIE
+# ==================================================
+
+st.divider()
+st.subheader("Historie cen")
+
+historie = nacti_historii()
+
+st.caption(
+    f"Celkový počet záznamů: {len(historie)}"
+)
+
+if historie.empty:
+    st.info(
+        "Historie je zatím prázdná. "
+        "Po prvním úspěšném hledání se sem uloží nabídky."
+    )
 
 else:
-    historie = nacti_historii()
+    historie["cena"] = pd.to_numeric(
+        historie["cena"],
+        errors="coerce"
+    )
 
-    if historie.empty:
-        st.caption(
-            "Historie zatím neobsahuje žádné záznamy."
+    historie["datum_parsed"] = pd.to_datetime(
+        historie["datum"],
+        errors="coerce"
+    )
+
+    historie = historie.sort_values(
+        by="datum_parsed",
+        ascending=False
+    )
+
+    dostupne_produkty = sorted(
+        historie["hledany_produkt"]
+        .dropna()
+        .astype(str)
+        .unique()
+        .tolist()
+    )
+
+    vybrany_produkt = st.selectbox(
+        "Filtrovat historii podle produktu",
+        options=["Všechny produkty"] + dostupne_produkty
+    )
+
+    historie_filtrovana = historie.copy()
+
+    if vybrany_produkt != "Všechny produkty":
+        historie_filtrovana = historie_filtrovana[
+            historie_filtrovana[
+                "hledany_produkt"
+            ] == vybrany_produkt
+        ]
+
+    st.dataframe(
+        historie_filtrovana[
+            [
+                "datum",
+                "hledany_produkt",
+                "produkt",
+                "obchod",
+                "cena_text",
+                "platnost",
+                "poznamka",
+                "odkaz"
+            ]
+        ],
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "datum": "Datum kontroly",
+            "hledany_produkt": "Hledaný výraz",
+            "produkt": "Produkt",
+            "obchod": "Obchod",
+            "cena_text": "Cena",
+            "platnost": "Platnost",
+            "poznamka": "Poznámka",
+            "odkaz": st.column_config.LinkColumn(
+                "Leták",
+                display_text="Otevřít"
+            )
+        }
+    )
+
+    # ==================================================
+    # GRAF HISTORIE
+    # ==================================================
+
+    graf_data = historie_filtrovana.dropna(
+        subset=[
+            "datum_parsed",
+            "cena"
+        ]
+    ).copy()
+
+    if not graf_data.empty:
+        st.subheader(
+            "Vývoj nalezených cen"
         )
-    else:
-        st.caption(
-            f"V historii je aktuálně uloženo "
-            f"{len(historie)} záznamů."
-        )
-WATCHLIST_FILE = Path("watchlist.csv")
 
-
-def nacti_watchlist():
-    if not WATCHLIST_FILE.exists():
-        return pd.DataFrame(
-            columns=["Produkt", "Limit"]
+        graf_data = graf_data.sort_values(
+            by="datum_parsed"
         )
 
-    return pd.read_csv(WATCHLIST_FILE)
+        st.line_chart(
+            graf_data,
+            x="datum_parsed",
+            y="cena",
+            color="obchod"
+        )
+
+    # ==================================================
+    # STAŽENÍ HISTORIE
+    # ==================================================
+
+    export_historie = historie.drop(
+        columns=["datum_parsed"],
+        errors="ignore"
+    )
+
+    csv_data = export_historie.to_csv(
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+    st.download_button(
+        label="Stáhnout historii jako CSV",
+        data=csv_data,
+        file_name="history.csv",
+        mime="text/csv"
+    )
+
+
+# ==================================================
+# TECHNICKÉ INFORMACE
+# ==================================================
+
+with st.expander(
+    "Technické informace"
+):
+    st.write(
+        "Umístění souboru historie:"
+    )
+
+    st.code(
+        str(HISTORY_FILE.resolve())
+    )
+
+    st.write(
+        "Soubor existuje:",
+        HISTORY_FILE.exists()
+    )
+
+    if HISTORY_FILE.exists():
+        st.write(
+            "Velikost souboru:",
+            f"{HISTORY_FILE.stat().st_size} bajtů"
+        )
