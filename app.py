@@ -233,15 +233,67 @@ st.caption(
     "Vyhledávání akčních nabídek v Lidlu a Kauflandu"
 )
 
+# ==================================================
+# SIDEBAR - SLEDOVANÉ PRODUKTY
+# ==================================================
 
+st.sidebar.header("📌 Sledované produkty")
+
+WATCHLIST_FILE = Path("watchlist.csv")
+
+if not WATCHLIST_FILE.exists():
+    pd.DataFrame(
+        columns=["produkt", "limit"]
+    ).to_csv(
+        WATCHLIST_FILE,
+        index=False,
+        encoding="utf-8-sig"
+    )
+
+watchlist = pd.read_csv(
+    WATCHLIST_FILE
+)
+
+if not watchlist.empty:
+
+    vybrany = st.sidebar.selectbox(
+        "Vyber sledovaný produkt",
+        watchlist["produkt"].tolist()
+    )
+
+    if st.sidebar.button(
+        "Použít produkt"
+    ):
+        st.session_state["produkt"] = vybrany
+
+    st.sidebar.divider()
+
+    st.sidebar.write(
+        f"Sledovaných produktů: {len(watchlist)}"
+    )
+
+    st.sidebar.dataframe(
+        watchlist,
+        hide_index=True,
+        use_container_width=True
+    )
+
+else:
+    st.sidebar.info(
+        "Seznam sledovaných produktů je prázdný."
+    )
 # ==================================================
 # VSTUPNÍ ÚDAJE
 # ==================================================
 
+if "produkt" not in st.session_state:
+    st.session_state["produkt"] = "Kuřecí prsní"
+
 produkt = st.text_input(
     "Hledaný produkt",
-    value="Kuřecí prsní"
+    key="produkt"
 )
+
 
 st.sidebar.title("⭐ Hlídač cen")
 
