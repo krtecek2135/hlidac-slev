@@ -1,18 +1,30 @@
 import streamlit as st
 import pandas as pd
 import requests
-
+from bs4 import BeautifulSoup
+from urllib.parse import quote_plus
 from datetime import datetime
 from pathlib import Path
-from bs4 import BeautifulSoup
-from urllib.parse import quote_plus, urljoin
 
-HISTORY_FILE = "history.csv"
+HISTORY_FILE = Path("history.csv")
 
-if not Path(HISTORY_FILE).exists():
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        f.write("datum,produkt,cena\n")
+if not HISTORY_FILE.exists():
+    pd.DataFrame(
+        columns=["datum", "produkt", "cena"]
+    ).to_csv(
+        HISTORY_FILE,
+        index=False,
+        encoding="utf-8"
+    )
 
+elif HISTORY_FILE.stat().st_size == 0:
+    pd.DataFrame(
+        columns=["datum", "produkt", "cena"]
+    ).to_csv(
+        HISTORY_FILE,
+        index=False,
+        encoding="utf-8"
+    )
 st.set_page_config(
     page_title="Hlídač slev",
     page_icon="🛒",
