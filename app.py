@@ -504,7 +504,7 @@ if hledat:
                 "Dnešní nabídky už byly v historii uloženy."
             )
 
-                nejlevnejsi = df.dropna(
+            nejlevnejsi = df.dropna(
             subset=["Cena (Kč)"]
         ).head(1)
 
