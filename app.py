@@ -459,7 +459,7 @@ else:
                 "produkt",
                 "obchod",
                 "cena_text",
-                "platnost,
+                "platnost",
                 "odkaz"
             ]
         ],
