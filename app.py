@@ -354,7 +354,7 @@ if hledat:
         if obchod.lower() not in [
             "lidl",
             "kaufland"
-        \]:
+        ]:
             continue
 
         cena_text = cena_element.get_text(
