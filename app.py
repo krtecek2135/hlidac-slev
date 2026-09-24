@@ -231,3 +231,8 @@ if st.button("Najít akce", type="primary"):
                 )
             }
         )
+
+st.write(
+    "Řádků v historii:",
+    len(pd.read_csv("history.csv"))
+)
