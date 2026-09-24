@@ -57,7 +57,7 @@ if st.button("Najít akce", type="primary"):
     if ceny:
         nalezene_ceny = []
 
-        for cena in ceny[:30\]:
+        for cena in ceny[:30]:
             text_ceny = cena.get_text(" ", strip=True)
 
             # Hledání většího rodičovského bloku
@@ -97,7 +97,7 @@ if st.button("Najít akce", type="primary"):
                 "jednoznačně určit Lidl nebo Kaufland."
             )
 
-            for cena in ceny[:10\]:
+            for cena in ceny[:10]:
                 st.write(cena.get_text(" ", strip=True))
 
     else:
