@@ -431,6 +431,52 @@ def zobraz_historii(hledany_vyraz):
 st.title("🛒 Hlídač slev")
 st.caption("Vyhledávání akčních nabídek v Lidlu a Kauflandu")
 
+st.sidebar.header("⭐ Sledované produkty")
+
+watchlist = nacti_watchlist()
+
+if not watchlist.empty:
+    st.sidebar.dataframe(
+        watchlist,
+        hide_index=True
+    )
+
+novy_produkt = st.sidebar.text_input(
+    "Nový produkt"
+)
+
+limit = st.sidebar.number_input(
+    "Cenový limit",
+    min_value=0.0,
+    value=100.0
+)
+
+if st.sidebar.button("Přidat"):
+    
+    novy_radek = pd.DataFrame([
+        {
+            "Produkt": novy_produkt,
+            "Limit": limit
+        }
+    ])
+
+    watchlist = pd.concat(
+        [watchlist, novy_radek],
+        ignore_index=True
+    )
+
+    watchlist.drop_duplicates(
+        subset=["Produkt"],
+        inplace=True
+    )
+
+    watchlist.to_csv(
+        WATCHLIST_FILE,
+        index=False
+    )
+
+    st.rerun()
+
 produkt = st.text_input(
     "Hledaný produkt",
     value="Kuřecí prsní"
@@ -581,3 +627,13 @@ else:
             f"V historii je aktuálně uloženo "
             f"{len(historie)} záznamů."
         )
+WATCHLIST_FILE = Path("watchlist.csv")
+
+
+def nacti_watchlist():
+    if not WATCHLIST_FILE.exists():
+        return pd.DataFrame(
+            columns=["Produkt", "Limit"]
+        )
+
+    return pd.read_csv(WATCHLIST_FILE)
