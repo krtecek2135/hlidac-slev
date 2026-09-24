@@ -243,7 +243,7 @@ produkt = st.text_input(
     value="Kuřecí prsní"
 )
 
-cenovy_limit = st.number_input(
+cenovy_limit = st.sidebar.number_input(
     "Upozornit při ceně nižší nebo rovné",
     min_value=0.0,
     value=150.0,
