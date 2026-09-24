@@ -90,7 +90,7 @@ if st.button("Najít akce", type="primary"):
         )
 
         # Zobrazíme pouze Lidl a Kaufland.
-        if obchod.lower() not in ["lidl", "kaufland"\]:
+        if obchod.lower() not in ["lidl", "kaufland"]:
             continue
 
         cena_text = cena_element.get_text(
