@@ -499,7 +499,7 @@ if hledat:
                 f"Do historie bylo přidáno "
                 f"{pocet_novych_zaznamu} nových záznamů."
             )
-            else:
+        else:
             st.caption(
                 "Dnešní nabídky už byly v historii uloženy."
             )
