@@ -51,7 +51,7 @@ if st.button("Najít akce"):
 
         for element in soup.select(
             ".discount_price_value"
-        )[:5\]:
+        )[:5]:
 
             st.code(
                 str(element.parent)
