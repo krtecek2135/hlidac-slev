@@ -57,7 +57,7 @@ if st.button("Najít akce", type="primary"):
 
     st.subheader("Nalezené ceny")
 
-    for cena in ceny[:20\]:
+    for cena in ceny[:20]:
         st.write(cena.get_text(strip=True))
 
     if ceny:
