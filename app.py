@@ -519,5 +519,15 @@ if hledat:
                     nejlevnejsi_radek["Cena"]
                 )
 
-            with col2:
+           with col2:
+    st.metric(
+        "Nejlevnější obchod",
+        nejlevnejsi["Obchod"]
+    )
+
+with col3:
+    st.metric(
+        "Počet nabídek",
+        len(df)
+    )
               
