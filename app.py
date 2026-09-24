@@ -54,7 +54,5 @@ if st.button("Najít akce"):
         )[:5\]:
 
             st.code(
-                str(
-                    element.parent
-                )
+                str(element.parent)
             )
