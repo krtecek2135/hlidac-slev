@@ -243,16 +243,20 @@ produkt = st.text_input(
     value="Kuřecí prsní"
 )
 
-cenovy_limit = st.sidebar.number_input(
+st.sidebar.title("⭐ Hlídač cen")
+
+produkt = st.sidebar.text_input(
+    "Hledaný produkt"
+)
+
+limit = st.sidebar.number_input(
     "Upozornit při ceně nižší nebo rovné",
     min_value=0.0,
-    value=150.0,
-    step=10.0,
-    format="%.2f",
-    help=(
-        "Pokud bude nejnižší nalezená cena stejná "
-        "nebo nižší než tento limit, aplikace zobrazí upozornění."
-    )
+    value=150.0
+)
+
+hledat = st.sidebar.button(
+    "Najít akce"
 )
 
 hledat = st.button(
