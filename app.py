@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("🛒 Hlídač slev")
-st.caption("Vyhledávání nabídek v řetězcích Lidl a Kaufland")
+st.caption("Vyhledávání slev na Kupi.cz")
 
 produkt = st.text_input(
     "Hledaný produkt",
@@ -46,80 +46,61 @@ if st.button("Najít akce", type="primary"):
         st.stop()
 
     soup = BeautifulSoup(response.text, "html.parser")
-    ceny = soup.select(".discount_price_value")
 
-    st.success(
-        f"Stránka byla načtena. Nalezeno cenových údajů: {len(ceny)}"
+    ceny = soup.find_all(
+        "strong",
+        class_="discount_price_value"
     )
 
-    st.subheader("Nalezené ceny")
+    st.success(
+        f"Stránka byla načtena. Nalezeno cen: {len(ceny)}"
+    )
 
     if ceny:
-        nalezene_ceny = []
 
-        for cena in ceny[:30]:
-            text_ceny = cena.get_text(" ", strip=True)
+        vysledky = []
 
-            # Hledání většího rodičovského bloku
-            rodic = cena
+        for cena in ceny[:30\]:
+            vysledky.append({
+                "Cena": cena.get_text(strip=True)
+            })
 
-            for _ in range(8):
-                if rodic.parent is None:
-                    break
+        st.subheader("Nalezené ceny")
 
-                rodic = rodic.parent
-                obsah = rodic.get_text(" ", strip=True).lower()
-
-                if "lidl" in obsah or "kaufland" in obsah:
-                    obchod = (
-                        "Lidl"
-                        if "lidl" in obsah
-                        else "Kaufland"
-                    )
-
-                    nalezene_ceny.append(
-                        {
-                            "Obchod": obchod,
-                            "Cena": text_ceny
-                        }
-                    )
-                    break
-
-        if nalezene_ceny:
-            st.dataframe(
-                nalezene_ceny,
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info(
-                "Ceny byly nalezeny, ale v jejich okolí se nepodařilo "
-                "jednoznačně určit Lidl nebo Kaufland."
-            )
-
-            for cena in ceny[:10]:
-                st.write(cena.get_text(" ", strip=True))
+        st.dataframe(
+            vysledky,
+            use_container_width=True,
+            hide_index=True
+        )
 
     else:
-        st.error(
-            "Na stránce nebyly nalezeny žádné prvky "
-            "s třídou discount_price_value."
+        st.warning(
+            "Nebyla nalezena žádná cena."
         )
 
     with st.expander("Diagnostika prvního výsledku"):
 
         if ceny:
-            rodic = ceny[0]
+
+            prvek = ceny[0]
+
+            st.write("Text ceny:")
+            st.write(prvek.get_text(strip=True))
+
+            rodic = prvek
 
             for uroven in range(1, 9):
+
                 if rodic.parent is None:
-                    break
+                   break
 
                 rodic = rodic.parent
 
-                st.markdown(f"#### Nadřazená úroveň {uroven}")
+                st.markdown(
+                    f"### Nadřazená úroveň {uroven}"
+                )
+
                 st.code(
-                    str(rodic)[:8000],
+                    str(rodic)[:5000],
                     language="html"
                 )
-`
