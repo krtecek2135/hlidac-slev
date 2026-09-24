@@ -510,7 +510,7 @@ if hledat:
 
         col1, col2, col3 = st.columns(3)
 
-        if not nejlevnejsi.empty:
+                if not nejlevnejsi.empty:
             nejlevnejsi_radek = nejlevnejsi.iloc[0]
 
             with col1:
@@ -519,15 +519,64 @@ if hledat:
                     nejlevnejsi_radek["Cena"]
                 )
 
-           with col2:
-    st.metric(
-        "Nejlevnější obchod",
-        nejlevnejsi["Obchod"]
-    )
+            with col2:
+                st.metric(
+                    "Nejlevnější obchod",
+                    nejlevnejsi_radek["Obchod"]
+                )
+        else:
+            with col1:
+                st.metric(
+                    "Nejnižší cena",
+                    "Neuvedeno"
+                )
 
-with col3:
-    st.metric(
-        "Počet nabídek",
-        len(df)
-    )
-              
+            with col2:
+                st.metric(
+                    "Nejlevnější obchod",
+                    "Neuvedeno"
+                )
+
+        with col3:
+            st.metric(
+                "Počet nabídek",
+                len(df)
+            )
+
+        st.subheader("Nalezené nabídky")
+
+        st.dataframe(
+            df[
+                [
+                    "Produkt",
+                    "Obchod",
+                    "Cena",
+                    "Platnost",
+                    "Poznámka",
+                    "Leták"
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Leták": st.column_config.LinkColumn(
+                    "Odkaz na leták",
+                    display_text="Otevřít leták"
+                )
+            }
+        )
+
+        zobraz_historii(produkt)
+
+else:
+    historie = nacti_historii()
+
+    if historie.empty:
+        st.caption(
+            "Historie zatím neobsahuje žádné záznamy."
+        )
+    else:
+        st.caption(
+            f"V historii je aktuálně uloženo "
+            f"{len(historie)} záznamů."
+        )
