@@ -559,62 +559,7 @@ if hledat:
                     len(df)
                 )
 
-            # ==========================================
-            # HLÍDÁNÍ CENOVÉHO LIMITU
-            # ==========================================
-
-            if nejlevnejsi_cena <= cenovy_limit:
-                rozdil = cenovy_limit - nejlevnejsi_cena
-
-                st.success(
-                    f"Produkt je pod nastaveným limitem. "
-                    f"Nejnižší cena je "
-                    f"{nejlevnejsi_cena:.2f} Kč, "
-                    f"tedy o {rozdil:.2f} Kč méně "
-                    f"než nastavený limit."
-                )
-            else:
-                rozdil = nejlevnejsi_cena - cenovy_limit
-
-                st.info(
-                    f"Produkt zatím není pod nastaveným limitem. "
-                    f"Nejnižší cena je "
-                    f"{nejlevnejsi_cena:.2f} Kč, "
-                    f"tedy o {rozdil:.2f} Kč více "
-                    f"než nastavený limit."
-                )
-
-        else:
-            st.warning(
-                "Nabídky byly nalezeny, ale jejich ceny "
-                "se nepodařilo převést na čísla."
-            )
-
-        st.subheader(
-            "Nalezené nabídky"
-        )
-
-        st.dataframe(
-            df[
-                [
-                    "Produkt",
-                    "Obchod",
-                    "Cena",
-                    "Platnost",
-                    "Poznámka",
-                    "Leták"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Leták": st.column_config.LinkColumn(
-                    "Odkaz na leták",
-                    display_text="Otevřít leták"                )
-            }
-        )
-
-
+         
 # ==================================================
 # HISTORIE
 # ==================================================
