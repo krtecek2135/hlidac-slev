@@ -823,7 +823,7 @@ if hledat:
                 ):
                     st.metric(
                         "Úspora",
-                        f"{nejlevnejsi['Úspora (%)'\]:.1f} %"
+                        f"{nejlevnejsi['Úspora (%)']:.1f} %"
                     )
                 else:
                     st.metric(
