@@ -843,4 +843,4 @@ if hledat:
 
             if nejlevnejsi_cena <= limit:
                 st.success(
-                    f"Akční cena {formatuj_cenu
+                    f"Akční cena {formatuj_cenu}
